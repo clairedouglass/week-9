@@ -63,6 +63,7 @@ Questions you should ask yourself:
   - What can I do with the output?
   - Can I get a lat/lng from the output?
 
+https://search.mapzen.com/v1/search?api_key=mapzen-7F841DD&text=Drexel
 
 Task 2: Use Mapzen's 'Mobility' API to generate a route based on your origin and destination
 
@@ -71,6 +72,7 @@ Again, the task is somewhat underspecified. Let's start with the simplest routin
 option available: 'Optimized Route' (https://mapzen.com/documentation/mobility/optimized/api-reference/).
 Once you're getting a valid (as best you can tell) response from the server, move
 to the next task.
+
 
 
 Task 3: Decode Mapzen's route response
@@ -130,7 +132,6 @@ var goToOrigin = _.once(function(lat, lng) {
   map.flyTo([lat, lng], 14);
 });
 
-
 /* Given a lat and a long, we should create a marker, store it
  *  somewhere, and add it to the map
  */
@@ -142,16 +143,24 @@ var updatePosition = function(lat, lng, updated) {
   goToOrigin(lat, lng);
 };
 
+//Define global variables for current Lat and Lon
+var currentLat, currentLon;
+
 $(document).ready(function() {
   /* This 'if' check allows us to safely ask for the user's current position */
   if ("geolocation" in navigator) {
     navigator.geolocation.getCurrentPosition(function(position) {
       updatePosition(position.coords.latitude, position.coords.longitude, position.timestamp);
+      currentLat = position.coords.latitude;
+      currentLon = position.coords.longitude;
     });
   } else {
     alert("Unable to access geolocation API!");
   }
+});
 
+//Define global variables used for 1st API call
+var routePoints, destCoords, destLat, destLon;
 
   /* Every time a key is lifted while typing in the #dest input, disable
    * the #calculate button if no text is in the input
@@ -162,14 +171,49 @@ $(document).ready(function() {
     } else {
       $('#calculate').attr('disabled', false);
     }
-  });
+    var dest = $('#dest').val();
+    //Makes an API request and returns geo JSON
+    var request1 = $.ajax('https://search.mapzen.com/v1/search?api_key=mapzen-7F841DD&text=' + dest + '&boundary.circle.lat=' + currentLat + '&boundary.circle.lon=' + currentLon + '&boundary.circle.radius=100');
+    //retrieve the lat.long coordinates from the geoJSON
+    request1.done(function(data) {
+      destCoords = data.features[0].geometry.coordinates;
+      console.log(destCoords);
+      destLat = data.features[0].geometry.coordinates[0];
+      destLon = data.features[0].geometry.coordinates[1];
+      console.log(destLat);
+      console.log(destLon);
+      routePoints = {
+        "locations":
+          [{"lat": currentLat, "lon": currentLon},
+          {"lat": destLon, "lon": destLat}],
+          "costing":"auto",
+          "directions_options":{"units":"miles"}
+      };
+      var dataArray = data.features[0].geometry.coordinates;
+      var marker = L.marker(dataArray.reverse()).addTo(map);
+      console.log(marker);
+      var latlon = dataArray.reverse();
+    });
+ });
 
-  // click handler for the "calculate" button (probably you want to do something with this)
+//Define global variables for the 2nd API call
+var myRoute;
+var decodedStr;
+
+// click handler for the "calculate" button (probably you want to do something with this)
   $("#calculate").click(function(e) {
     var dest = $('#dest').val();
-    console.log(dest);
+    var stringRoute = "https://matrix.mapzen.com/optimized_route?json=" + JSON.stringify(routePoints) + "&api_key=mapzen-7F841DD";
+    console.log(stringRoute);
+    var request2 = $.ajax(stringRoute);
+    request2.done(function(data) {
+      console.log(request2);
+      var str = data.trip.legs[0].shape;
+      var decodedStr = decode(str);
+      console.log('decodedStr', decodedStr);
+      var myRoute = L.polyline(decodedStr, {color: 'tomato'}).addTo(map);
+    });
   });
 
-});
 
-
+//Notes: use turf linesString to take an ordered set of Lat Longs and determine the distance between them
